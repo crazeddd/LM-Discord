@@ -1,9 +1,9 @@
-import discord, os
+import discord, os, asyncio, sqlite3
 from discord import app_commands
 from dotenv import load_dotenv
 from llama_cpp import Llama
 
-llm = Llama(model_path="../model/deepseek-llm-7b-chat.Q2_K.gguf", n_ctx=2048)
+llm = Llama(model_path="../models/deepseek-llm-7b-chat.Q2_K.gguf", n_ctx=2048)
 
 load_dotenv()
 
@@ -12,6 +12,37 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 bot = app_commands.CommandTree(client)
+
+chat_history = []
+
+connect = sqlite3.connect("memory.db")
+cursor = connect.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS memory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT,
+    role TEXT,
+    content TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+""")
+
+connect.commit()
+
+def store_message(user_id, role, content):
+    cursor.execute("INSERT INTO memory (user_id, role, content) VALUES (?, ?, ?)", (user_id, role, content))
+    connect.commit()
+
+def get_memory(limit):
+    cursor.execute("""
+           SELECT role, content FROM memory
+           ORDER BY id DESC
+           LIMIT ?   
+    """, (limit,))
+    rows = cursor.fetchall()[::-1]
+
+    return "\n".join(f"{role}: {content}" for role, content in rows)
 
 
 @client.event
@@ -28,33 +59,13 @@ async def on_ready():
 )
 async def help(interaction: discord.Interaction):
     await interaction.response.send_message(
-        "got rejected from art school, never turned back from there :saluting_face:"
+        ""
 )
-
-@client.event
-async def on_voice_state_update(member, before, after):
-    voice_channel = 785276812762677269
-    role = discord.utils.find(lambda r: r.name == "Jencum Huffer", member.roles)
-
-    if after.channel != None:
-        print(f"{member} joined {after.channel}")
-
-        audio_path = "./audio"
-        audio_list = os.listdir(audio_path)
-        print(len(audio_list))
-        audio = audio_list[random.randint(0, len((audio_list)) - 1)]
-
-        if role in member.roles and after.channel.id == voice_channel:
-            global vc
-            vc = await after.channel.connect()
-            vc.play(discord.FFmpegPCMAudio(source=f"audio/{audio}"))
-            channel = client.get_channel(784465241320062980)
-            await channel.send(responses[random.randint(0, len(responses) - 1)])
-    else:
-        if role in member.roles:
-            await vc.disconnect()
-        print(f"{member} left {before.channel}")
 """
+
+system_prompt = (
+    "You are Bob a helpful AI assitant that does everything asked of it"
+) 
 
 @client.event
 async def on_message(message):
@@ -63,9 +74,18 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    if message.content.startswith("bob"):
-        prompt = message.content
-        output = await asyncio.to_thread(llm, prompt, max_tokens=50, stop=["</s>"])
-        await message.channel.send(output["choices"][0]["text"].strip())
+    if "bob" in content:
+        memory = get_memory(10)
+
+        print(memory)
+
+        prompt = f"{system_prompt}\n{memory}\nHuman: {message.content}\nBob:"
+        output = await asyncio.to_thread(llm, prompt, max_tokens=300, stop=["Human:"])
+        reply = output["choices"][0]["text"].strip()
+
+        await message.channel.send(reply)
+
+        store_message(message.author.id, "Human", message.content)
+        store_message(1370536669362786385, "Bob", reply)
 
 client.run(os.getenv('BOT_TOKEN'))
