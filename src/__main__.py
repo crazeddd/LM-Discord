@@ -3,7 +3,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 from llama_cpp import Llama
 
-llm = Llama(model_path="../models/deepseek-llm-7b-chat.Q2_K.gguf", n_ctx=2048)
+llm = Llama(model_path="../models/deepseek-llm-7b-chat.Q5_K_M.gguf", n_ctx=2048)
 
 load_dotenv()
 
@@ -18,7 +18,8 @@ chat_history = []
 connect = sqlite3.connect("memory.db")
 cursor = connect.cursor()
 
-cursor.execute("""
+cursor.execute(
+    """
 CREATE TABLE IF NOT EXISTS memory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT,
@@ -26,20 +27,30 @@ CREATE TABLE IF NOT EXISTS memory (
     content TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 )
-""")
+"""
+)
 
 connect.commit()
 
+
 def store_message(user_id, role, content):
-    cursor.execute("INSERT INTO memory (user_id, role, content) VALUES (?, ?, ?)", (user_id, role, content))
+    cursor.execute(
+        "INSERT INTO memory (user_id, role, content) VALUES (?, ?, ?)",
+        (user_id, role, content),
+    )
     connect.commit()
 
-def get_memory(limit):
-    cursor.execute("""
+
+def get_memory_chunk(user_id, limit):
+    cursor.execute(
+        """
            SELECT role, content FROM memory
+           WHERE user_id = ?
            ORDER BY id DESC
            LIMIT ?   
-    """, (limit,))
+    """,
+        (user_id, limit),
+    )
     rows = cursor.fetchall()[::-1]
 
     return "\n".join(f"{role}: {content}" for role, content in rows)
@@ -47,9 +58,10 @@ def get_memory(limit):
 
 @client.event
 async def on_ready():
-    print(f'We have logged in as {client.user}')
+    print(f"We have logged in as {client.user}")
     await bot.sync(guild=discord.Object(id=784465241320062976))
     print("Connected to Discord Server!")
+
 
 """
 @bot.command(
@@ -63,29 +75,50 @@ async def help(interaction: discord.Interaction):
 )
 """
 
-system_prompt = (
-    "You are Bob a helpful AI assitant that does everything asked of it"
-) 
-
 @client.event
 async def on_message(message):
-    content = message.content.lower()
 
     if message.author == client.user:
         return
 
-    if "bob" in content:
-        memory = get_memory(10)
+    if "bob" in message.content.lower() or client.user in message.mentions:
 
-        print(memory)
+        memory = get_memory_chunk(message.author.id, 10)
 
-        prompt = f"{system_prompt}\n{memory}\nHuman: {message.content}\nBob:"
-        output = await asyncio.to_thread(llm, prompt, max_tokens=300, stop=["Human:"])
-        reply = output["choices"][0]["text"].strip()
+        prompt = f"""
+            You are Bob, a Discord-based assistant with memory and a understated but prominent sense of humor.
+            You remember key facts and recent conversation history that is provided to you. Use it to answer users as if you've been here the whole time.
+            You give useful answers and respond informally, but without being exaggerated. 
+            Avoid overly theatrical or cheesy responses.
+            You use Discord's markdown in your messages.
+
+            [Recent Conversation]
+            {memory}
+
+            {message.author.name}: {message.content}
+            Bob:"""
+
+        print(prompt)
+
+        def generate_tokens():
+            return llm(
+                prompt,
+                max_tokens=200,
+                stop=[f"{message.author.name}:"],
+                temperature=0.8,
+                top_p=0.9,
+                top_k=40,
+                repeat_penalty=1.1,
+            )
+
+        async with message.channel.typing():
+            output = await asyncio.to_thread(generate_tokens)
+            reply = output["choices"][0]["text"].strip()
 
         await message.channel.send(reply)
 
-        store_message(message.author.id, "Human", message.content)
-        store_message(1370536669362786385, "Bob", reply)
+        store_message(message.author.id, message.author.name, message.content)
+        store_message(message.author.id, "Bob", reply)
 
-client.run(os.getenv('BOT_TOKEN'))
+
+client.run(os.getenv("BOT_TOKEN"))
