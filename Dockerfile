@@ -14,6 +14,6 @@ COPY . /app
 WORKDIR /app
 
 RUN pip install --upgrade pip setuptools wheel
-RUN pip install llama-cpp-python dotenv discord.py discord.py[voice] asyncio 
+RUN pip install dotenv discord.py discord.py[voice] asyncio requests
 
 CMD ["python3"]
