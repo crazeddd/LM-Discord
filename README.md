@@ -2,7 +2,7 @@
 
 ## Setup
 
-1. Create a new discord bot and add it to a server or as a user app
+1. Create a new [discord bot](https://discord.com/developers/applications) and add it to a server or as a user app
 2. Clone or download the repo
 3. Go to the src folder and create a .env file with a `BOT_TOKEN` variable
 4. Copy your bot token and add it to the `BOT_TOKEN` value
