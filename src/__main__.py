@@ -13,17 +13,17 @@ bot = app_commands.CommandTree(client)
 
 # LM STUDIO REST API
 
+CURRENT_MODEL = "hermes-3-llama-3.1-8b"
 
 async def stream(prompt, system_prompt):
     url = "http://host.docker.internal:1234/v1/chat/completions"
     headers = {"Content-Type": "application/json"}
     payload = {
-        "model": "mistral-nemo-instruct-2407",
+        "model": CURRENT_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.7,
         "stream": True,
     }
 
@@ -92,14 +92,49 @@ def get_memory_chunk(channel_id, limit):
     return "\n".join(f"{role}: {content}" for role, content in rows)
 
 
+async def get_channel_history(history):
+    history = [msg async for msg in history]
+    messages = []
+
+    for msg in history:
+        messages.insert(
+            0,
+            f"[{msg.created_at.strftime('%Y-%m-%d %H:%M:%S')}] {msg.author.name}: {msg.content}",
+        )
+    recent = "\n".join(messages)
+
+    return recent
+
+
 # WEB SEARCHES
 async def web_search(prompt, max_results=2):
-    system_prompt = f"""
-            Rewrite the following question into a short, Google-style search query, if you believe a search is necessary.
-            If you think the question can be answered without a search, respond with "No search needed".
-            """
+    system_prompt = """
+You are helping decide whether a user's message requires a web search.
+
+IMPORTANT:
+- Your internal knowledge only goes up to 2023. It may be outdated.
+- If the question mentions current events, public figures, politics, the economy, recent data, live events, or anything time-sensitive, assume a search *is needed*.
+- Err on the side of doing a search if you're unsure.
+- Only respond with "No search needed" if the question is timeless (e.g. basic math, historical facts before 2023, or fictional lore).
+- If the question *definitely* needs a search, rewrite it as a short search query.
+
+Examples:
+User: Who is the current president of the US?
+Output: current us president
+
+User: What's 2 + 2?
+Output: No search needed
+
+User: Did Elon Musk step down?
+Output: elon musk twitter ceo 2024
+
+User: Tell me about photosynthesis.
+Output: No search needed
+"""
+
     query = ""
-    async for token in stream(prompt, system_prompt):
+
+    async for token in stream(prompt + "/no_think", system_prompt):
         query += token
 
     print(query)
@@ -150,39 +185,53 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    if "bob" in message.content.lower() or client.user in message.mentions:
+    if (
+        client.user.name.lower() in message.content.lower()
+        or client.user in message.mentions
+    ):
 
-        memory = get_memory_chunk(message.channel.id, 8)
-        search_res = await web_search(message.content)
+        #memory = get_memory_chunk(message.channel.id, 8)
+        #search_res = await web_search(message.content)
+        recent = await get_channel_history(message.channel.history(limit=15))
 
-        system_prompt = f"""You are Bob, a Discord-based assistant with memory and a dry sense of humor.
+        system_prompt = f"""You are {client.user.name}, a Discord-based assistant with memory and a dry sense of humor.
 Respond informally and helpfully, using provided memory to act like you've been part of the conversation.
-Avoid exaggeration or cheesy replies.
+Avoid exaggeration or cheesy replies and use modern humor.
 Use Discord markdown for emphasis.
 
-[Recent Conversation]
-{memory}
-
-[Search Results]
-{search_res}
-
+[Recent Messages]
+{recent}
 """
-
-        print(system_prompt)
-
         prompt = f"{message.author.name}: {message.content}\nBob:"
+
+        print(system_prompt, prompt)
 
         async with message.channel.typing():
             is_first_chunk = True
+            inside_think = False
             buffer_rate = 175
             reply = ""
             buffer = ""
 
             async for token in stream(prompt, system_prompt):
-                reply += token
                 buffer += token
 
-                if is_first_chunk:
+                if "<think>" in buffer:
+                    buffer = ""  # discard start tag
+                    inside_think = True
+                    continue
+
+                if "</think>" in buffer:
+                    buffer = ""  # discard end tag
+                    inside_think = False
+                    continue
+
+                if inside_think:
+                    continue
+
+                reply += token
+
+                if is_first_chunk and reply.strip():
                     sent = await message.channel.send(content=reply.strip())
                     is_first_chunk = False
 
@@ -192,8 +241,12 @@ Use Discord markdown for emphasis.
 
         await sent.edit(content=reply.strip())
 
-        store_message(message.author.id, message.channel.id, message.author.name, message.content)
-        store_message(message.author.id, message.channel.id, "Bob", reply.strip())
+        store_message(
+            message.author.id, message.channel.id, message.author.name, message.content
+        )
+        store_message(
+            message.author.id, message.channel.id, client.user.name, reply.strip()
+        )
 
 
 client.run(os.getenv("BOT_TOKEN"))
