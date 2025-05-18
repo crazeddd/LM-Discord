@@ -1,7 +1,9 @@
-import discord, os, asyncio, sqlite3, aiohttp, json
+import discord, os, asyncio, aiohttp, json
 from discord import app_commands
+from discord.ui import View
 from dotenv import load_dotenv
-from duckduckgo_search import DDGS
+
+from memory import Memory
 
 load_dotenv()
 
@@ -10,16 +12,33 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 bot = app_commands.CommandTree(client)
+guild = discord.Object(id=1372068994101547010)
 
 # LM STUDIO REST API
+current_model = "gemma-3-12b-it"
 
-CURRENT_MODEL = "hermes-3-llama-3.1-8b"
+HOST = os.getenv("LM_STUDIO_HOST")
+PORT = int(os.getenv("LM_STUDIO_PORT"))
+
+async def get_models():
+    url = f"{HOST}:{PORT}/v1/models"
+    headers = {"Content-Type": "application/json"}
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as res:
+            if res.status == 200:
+                data = await res.json()
+                return data
+            else:
+                print("Error fetching models:", res.status)
+                return None
+
 
 async def stream(prompt, system_prompt):
-    url = "http://host.docker.internal:1234/v1/chat/completions"
+    url = f"{HOST}:{PORT}/v1/chat/completions"
     headers = {"Content-Type": "application/json"}
     payload = {
-        "model": CURRENT_MODEL,
+        "model": current_model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
@@ -28,12 +47,12 @@ async def stream(prompt, system_prompt):
     }
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, headers=headers, json=payload) as resp:
-            async for line in resp.content:
+        async with session.post(url, headers=headers, json=payload) as res:
+            async for line in res.content:
                 line = line.decode("utf-8").strip()
 
                 if not line.startswith("data:"):
-                    continue  # Skip if it's not a data line
+                    continue
 
                 if line == "data: [DONE]":
                     break
@@ -46,50 +65,6 @@ async def stream(prompt, system_prompt):
                         yield content
                 except Exception:
                     continue
-
-
-# MEMORY
-
-connect = sqlite3.connect("memory.db")
-cursor = connect.cursor()
-
-cursor.execute(
-    """
-CREATE TABLE IF NOT EXISTS memory (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT,
-    channel_id TEXT,
-    role TEXT,
-    content TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-)
-"""
-)
-
-connect.commit()
-
-
-def store_message(user_id, channel_id, role, content):
-    cursor.execute(
-        "INSERT INTO memory (user_id, channel_id, role, content) VALUES (?, ?, ?, ?)",
-        (user_id, channel_id, role, content),
-    )
-    connect.commit()
-
-
-def get_memory_chunk(channel_id, limit):
-    cursor.execute(
-        """
-           SELECT role, content FROM memory
-           WHERE channel_id = ?
-           ORDER BY timestamp DESC 
-           LIMIT ?   
-    """,
-        (channel_id, limit),
-    )
-    rows = cursor.fetchall()[::-1]
-
-    return "\n".join(f"{role}: {content}" for role, content in rows)
 
 
 async def get_channel_history(history):
@@ -106,77 +81,89 @@ async def get_channel_history(history):
     return recent
 
 
-# WEB SEARCHES
-async def web_search(prompt, max_results=2):
-    system_prompt = """
-You are helping decide whether a user's message requires a web search.
-
-IMPORTANT:
-- Your internal knowledge only goes up to 2023. It may be outdated.
-- If the question mentions current events, public figures, politics, the economy, recent data, live events, or anything time-sensitive, assume a search *is needed*.
-- Err on the side of doing a search if you're unsure.
-- Only respond with "No search needed" if the question is timeless (e.g. basic math, historical facts before 2023, or fictional lore).
-- If the question *definitely* needs a search, rewrite it as a short search query.
-
-Examples:
-User: Who is the current president of the US?
-Output: current us president
-
-User: What's 2 + 2?
-Output: No search needed
-
-User: Did Elon Musk step down?
-Output: elon musk twitter ceo 2024
-
-User: Tell me about photosynthesis.
-Output: No search needed
-"""
-
-    query = ""
-
-    async for token in stream(prompt + "/no_think", system_prompt):
-        query += token
-
-    print(query)
-    if "no search needed" in query.lower():
-        return ["No search needed"]
-    else:
-        try:
-            with DDGS() as ddgs:
-                results = ddgs.text(query, max_results=max_results)
-                return [f"{r['title']}: {r['body']}" for r in results]
-        except Exception as e:
-            print("Search error:", e)
-            return ["[Search failed]"]
-
-
-@client.event
-async def on_ready():
-    print(f"We have logged in as {client.user}")
-    await bot.sync(guild=discord.Object(id=784465241320062976))
-    print("Connected to guild")
-
-
-"""
-@bot.command(
-    name="help",
-    description="Tells u a little about the bot",
-    guild=discord.Object(id=784465241320062976),
-)
-async def help(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        ""
-)
-"""
-
-
+# COMMANDS
 @bot.command(
     name="model",
-    description="Changes the model Bob runs on",
-    guild=discord.Object(id=784465241320062976),
+    description=f"Change the current model",
+    guild=guild,
 )
-async def help(interaction: discord.Interaction):
-    await interaction()
+async def model(interaction: discord.Interaction):
+    models = await get_models()
+    models_formatted = "```\n" + "\n".join(m["id"] for m in models["data"]) + "```"
+
+    class Select(discord.ui.Select):
+        def __init__(self):
+            options = [
+                discord.SelectOption(
+                    label=m["id"], emoji="🤖", description=m["owned_by"]
+                )
+                for m in models["data"]
+                if m["id"] != current_model
+            ]
+            super().__init__(
+                placeholder="Choose a Model",
+                max_values=1,
+                min_values=1,
+                options=options,
+            )
+
+        async def callback(self, interaction: discord.Interaction):
+            self.selection = interaction.data["values"][0]
+            global current_model
+            current_model = self.selection
+            await interaction.response.send_message(
+                f"Updated Model to: {self.selection}"
+            )
+
+    view = View()
+    view.add_item(Select())
+
+    embed = discord.Embed(
+        title=f"Current model: `{current_model}`",
+        description="Change or update the running model",
+        color=discord.Color.from_rgb(15, 213, 121),
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.add_field(name="Available Models", value=models_formatted)
+
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@bot.command(
+    name="purge",
+    description=f"Deletes a number of recent messages in a channel",
+    guild=guild,
+)
+async def purge(
+    interaction: discord.Interaction, channel: discord.TextChannel, amount: int
+):
+    i = 0
+
+    if amount > 100:
+        await interaction.response.send_message(
+            content="Woops! You can't delete more than 100 messages at once"
+        )
+        return
+
+    await interaction.response.send_message(
+        content=f"Deleting **{amount}** messages in **{channel.mention}**..."
+    )
+
+    skipped = False
+    async for msg in channel.history(limit=amount + 1):
+        if not skipped:
+            skipped = True
+            continue
+
+        i += 1
+        await asyncio.sleep(0.30)
+        await msg.delete()
+
+    await interaction.edit_original_response(
+        content=f"Finished deleting **{i}** messages\n-# (This message will be deleted in 5s)"
+    )
+    await asyncio.sleep(5)
+    await interaction.delete_original_response()
 
 
 @client.event
@@ -190,8 +177,8 @@ async def on_message(message):
         or client.user in message.mentions
     ):
 
-        #memory = get_memory_chunk(message.channel.id, 8)
-        #search_res = await web_search(message.content)
+        # local_memory = Memory.get_memory_chunk(message.channel.id, 8)
+        # search_res = await web_search(message.content)
         recent = await get_channel_history(message.channel.history(limit=15))
 
         system_prompt = f"""You are {client.user.name}, a Discord-based assistant with memory and a dry sense of humor.
@@ -241,12 +228,13 @@ Use Discord markdown for emphasis.
 
         await sent.edit(content=reply.strip())
 
-        store_message(
-            message.author.id, message.channel.id, message.author.name, message.content
-        )
-        store_message(
-            message.author.id, message.channel.id, client.user.name, reply.strip()
-        )
+
+# DISCORD INIT
+@client.event
+async def on_ready():
+    print(f"We have logged in as {client.user}")
+    await bot.sync(guild=guild)
+    print("Synced commands")
 
 
 client.run(os.getenv("BOT_TOKEN"))
