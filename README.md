@@ -1,7 +1,14 @@
-# disAI
+# LM + Discord
+A simple discord bot for the LM Studio REST API.
+
+## Features
+- Channel based memory
+- Long term server based memory
+- Web search functionality
+- Built in commands to interact with the LLMs
+- Very customizable
 
 ## Setup
-
 1. Create a new [discord bot](https://discord.com/developers/applications) and add it to a server or as a user app
 2. Clone or download the repo
 3. Go to the src folder and create a .env file with a `BOT_TOKEN` variable
@@ -19,4 +26,8 @@
 
 ## Using the bot:
 By default replies to @'s but can be configured to respond to other things.
-Have fun :)
+
+### Commands:
+`/model`: Lists all downloaded models and provides a dropdown to switch out current running model
+
+...and more to come
