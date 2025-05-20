@@ -1,9 +1,12 @@
+> [!IMPORTANT]  
+> This repo is still under active development and doesnt have a stable release yet.
+
 # LM + Discord
 A simple discord bot for the LM Studio REST API.
 
 ## Features
 - Channel based memory
-- Long term server based memory
+- Long term user based memory
 - Web search functionality
 - Built in commands to interact with the LLMs
 - Very customizable
@@ -21,8 +24,9 @@ A simple discord bot for the LM Studio REST API.
 2. Run the image
 
 ### If not using Docker:
-1. Run this script to download dependencies: `pip install dotenv discord.py discord.py[voice] asyncio requests`
-2. Then navigate to the src file and start the bot `cd src; python3 __main__.py`
+1. Navigate to the project root folder
+2. Run this script to download dependencies: `pip install dotenv discord.py asyncio requests`
+3. Then navigate to the src file and start the bot `cd src; python3 __main__.py`
 
 ## Using the bot:
 By default replies to @'s but can be configured to respond to other things.
