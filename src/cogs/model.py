@@ -3,7 +3,6 @@ from discord.ui import View
 from discord import app_commands
 from discord.ext import commands
 
-
 class Model(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -13,9 +12,11 @@ class Model(commands.Cog):
         name="model",
         description=f"Change the current model",
     )
-    async def model(self, interaction: discord.Interaction):
+    async def model(self, interaction: discord.Interaction) -> None:
+        current_model = self.lm_client.model
         models = await self.lm_client.get_models()
         models_formatted = "```\n" + "\n".join(m["id"] for m in models["data"]) + "```"
+        is_dm = interaction.guild is None
 
         class Select(discord.ui.Select):
             def __init__(self):
@@ -33,7 +34,7 @@ class Model(commands.Cog):
                     options=options,
                 )
 
-            async def callback(self, interaction: discord.Interaction):
+            async def callback(self, interaction: discord.Interaction) -> None:
                 self.selection = interaction.data["values"][0]
                 global current_model
                 current_model = self.selection
@@ -52,7 +53,7 @@ class Model(commands.Cog):
         )
         embed.add_field(name="Available Models", value=models_formatted)
 
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=is_dm)
 
 
 async def setup(bot: commands.Bot):

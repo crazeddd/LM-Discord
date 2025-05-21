@@ -17,7 +17,7 @@ class Purge(commands.Cog):
         interaction: discord.Interaction,
         channel: discord.TextChannel,
         amount: int,
-    ):
+    ) -> None:
         messages = []
         i = 0
 

@@ -1,5 +1,5 @@
 import os, aiohttp, json
-
+from typing import AsyncGenerator
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,7 +12,7 @@ class LMStudioClient:
         self.port = os.getenv("LM_STUDIO_PORT", 1234)
         self.model = os.getenv("DEFAULT_MODEL", None)
 
-    async def get_models(self):
+    async def get_models(self) -> AsyncGenerator[dict, None]:
         url = f"{self.host}:{self.port}/v1/models"
         headers = {"Content-Type": "application/json"}
 
@@ -29,13 +29,13 @@ class LMStudioClient:
                 print("Connection error:", e)
                 return
 
-    async def initialize_model(self):
+    async def initialize_model(self) -> None:
         if self.model is None:
             models = await self.get_models()
             if models and "data" in models and len(models["data"]) > 0:
                 self.model = models["data"][0]["id"]
 
-    async def stream(self, prompt, system_prompt):
+    async def stream(self, prompt, system_prompt) -> AsyncGenerator[str, None]:
         url = f"{self.host}:{self.port}/v1/chat/completions"
         headers = {"Content-Type": "application/json"}
         payload = {

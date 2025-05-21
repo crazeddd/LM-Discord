@@ -1,4 +1,4 @@
-import discord
+import discord, asyncio
 from discord.ext import commands
 
 
@@ -7,8 +7,11 @@ class Events(commands.Cog):
         self.bot = bot
         self.lm_client = bot.lm_client
         self.memory = bot.memory
+        self.tools = bot.tools
+        self.local_memory = None
+        self.i = 5
 
-    async def get_channel_history(history):
+    async def get_channel_history(self, history) -> str:
         history = [msg async for msg in history]
         messages = []
 
@@ -22,7 +25,7 @@ class Events(commands.Cog):
         return recent
 
     @commands.Cog.listener()
-    async def on_message(self, message):
+    async def on_message(self, message) -> None:
 
         if message.author == self.bot.user:
             return
@@ -33,32 +36,30 @@ class Events(commands.Cog):
         ):
             recent = await self.get_channel_history(message.channel.history(limit=10))
 
-            global i
-            i += 1
-            if i > 1:
-                await self.memory.update_memory(
-                    message.author.id, self.bot.user.name, recent
+            self.i += 1
+            if self.i > 5:
+                asyncio.create_task(
+                    self.memory.update_memory(message.author.id, self.bot.user.name, recent)
                 )
-                global local_memory
-                local_memory = self.memory.get_memory(message.author.id)
-                i = 0
+                self.local_memory = self.memory.get_memory(message.author.id)
+                self.i = 0
 
-            # search_res = await web_search(message.content)
+            #search_res = await self.tools.web_search(message.content)
 
-            system_prompt = f"""You are {self.bot.user.name}, a Discord-based assistant with memory and a dry sense of humor.
-    Respond informally and helpfully, using provided memory to act like you've been part of the conversation.
-    Avoid exaggeration or cheesy replies and use modern humor.
-    Use Discord markdown for emphasis.
+            system_prompt = f"""\
+                You are {self.bot.user.name}, a Discord-based assistant with memory and a dry sense of humor.
+                Respond informally and helpfully, using provided memory to act like you've been part of the conversation.
+                Avoid exaggeration or cheesy replies and use modern humor.
+                Write your response in clean paragraphs with no more than **one** blank line between sections. Do not add extra line breaks or spacing.
+                Use Discord markdown for emphasis.
 
-    [Memory]
-    {local_memory}
+                [Memory]
+                {self.local_memory}
 
-    [Recent Messages]
-    {recent}
-    """
+                [Recent Messages]
+                {recent}
+                """
             prompt = f"{message.author.name}: {message.content}\nBob:"
-
-            print(system_prompt, prompt)
 
             async with message.channel.typing():
                 is_first_chunk = True
@@ -87,7 +88,7 @@ class Events(commands.Cog):
                     reply += token
 
                     if is_first_chunk and reply.strip():
-                        sent = await message.channel.send(content=reply.rstrip())
+                        sent = await message.reply(content=reply.rstrip())
                         is_first_chunk = False
 
                     if len(buffer) > buffer_rate:

@@ -22,7 +22,7 @@ class Memory:
         )
         self.connection.commit()
 
-    def get_memory(self, user_id):
+    def get_memory(self, user_id) -> str:
         self.cursor.execute(
             """
             SELECT content FROM memory 
@@ -35,16 +35,22 @@ class Memory:
 
         return row[0] if row else "No memory yet."
 
-    async def update_memory(self, user_id, role, messages):
+    async def update_memory(self, user_id, role, messages) -> None:
         self.lm_studio = LMStudioClient()
         memory = self.get_memory(user_id)
         updated_memory = ""
 
         system_prompt = f"""
-        Summarize the recent messages from {user_id} in a concise manner to be stored as memory.
-        The memory is as follows:
+        Summarize the recent messages from {user_id} and the current memory together in a concise manner to be used as memory.
+
+        [Recent Messages]
+        {messages}
+
+        [Memory]
         {memory}
         """
+
+        print("MEMORY PROMPT:", memory)
 
         async for token in self.lm_studio.stream(
             messages, system_prompt

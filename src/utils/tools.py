@@ -20,16 +20,21 @@ class Tools:
         query = ""
 
         async for token in self.lm_studio.stream(prompt + "/no_think", system_prompt):
+            if token.strip() == "EOF:":
+                break
             query += token
 
         print(query)
         if "no search needed" in query.lower():
-            return ["No search needed"]
+            return "No search needed."
         else:
             try:
                 with DDGS() as ddgs:
                     results = ddgs.text(query, max_results=max_results)
+                    print("Search results:", results)
+                    if not results:
+                        return "No search results found, inform user of this."
                     return [f"{r['title']}: {r['body']}" for r in results]
             except Exception as e:
                 print("Search error:", e)
-                return ["[Search failed]"]
+                return "Search failed, inform user of failure."
