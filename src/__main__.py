@@ -1,6 +1,7 @@
-import discord, os, sys, datetime, asyncio
+import discord, os, sys, asyncio
 from discord.ext import commands
 from dotenv import load_dotenv
+from datetime import datetime
 
 from utils.memory import Memory
 from utils.lmstudio_client import LMStudioClient
@@ -15,22 +16,27 @@ intents.dm_messages = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+current_model = os.getenv("DEFAULT_MODEL", None)
+
 bot.lm_client = LMStudioClient()
 bot.memory = Memory()
 bot.tools = Tools()
-
-current_model = None
-local_memory = None
-i = 0
 
 
 @bot.event
 async def on_ready():
     global current_model
-    await bot.lm_client.initialize_model()
+    await bot.lm_client.initialize_model(current_model)
     current_model = bot.lm_client.model
-    time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     synced = await bot.tree.sync()
+
+    await bot.change_presence(
+        status=discord.Status.online,
+        activity=discord.Activity(
+            type=discord.ActivityType.listening, name=f"{current_model} 📦"
+        ),
+    )
 
     print(f"{time} Logged in as {bot.user}")
     print(f"{time} Discord.py version: {discord.__version__}")
@@ -40,10 +46,10 @@ async def on_ready():
 
 async def main():
     await bot.load_extension("cogs.model")
-    await bot.load_extension("cogs.purge")
     await bot.load_extension("cogs.events")
-    await bot.load_extension("cogs.test")
+    await bot.load_extension("cogs.ping")
     await bot.load_extension("cogs.prompt")
+    # await bot.load_extension("cogs.purge")
 
 
 asyncio.run(main())

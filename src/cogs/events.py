@@ -1,4 +1,4 @@
-import discord, asyncio
+import asyncio
 from discord.ext import commands
 
 
@@ -9,7 +9,6 @@ class Events(commands.Cog):
         self.memory = bot.memory
         self.tools = bot.tools
         self.local_memory = None
-        self.i = 5
 
     async def get_channel_history(self, history) -> str:
         history = [msg async for msg in history]
@@ -30,21 +29,14 @@ class Events(commands.Cog):
         if message.author == self.bot.user:
             return
 
-        if (
-            self.bot.user.name.lower() in message.content.lower()
-            or self.bot.user in message.mentions
-        ):
+        if self.bot.user in message.mentions:
             recent = await self.get_channel_history(message.channel.history(limit=10))
 
-            self.i += 1
-            if self.i > 5:
-                asyncio.create_task(
-                    self.memory.update_memory(message.author.id, self.bot.user.name, recent)
-                )
-                self.local_memory = self.memory.get_memory(message.author.id)
-                self.i = 0
+            self.local_memory = self.memory.search_memory(
+                message.author.id, message.content
+            )
 
-            #search_res = await self.tools.web_search(message.content)
+            # search_res = await self.tools.web_search(message.content)
 
             system_prompt = f"""\
                 You are {self.bot.user.name}, a Discord-based assistant with memory and a dry sense of humor.
@@ -60,6 +52,8 @@ class Events(commands.Cog):
                 {recent}
                 """
             prompt = f"{message.author.name}: {message.content}\nBob:"
+
+            print(system_prompt)
 
             async with message.channel.typing():
                 is_first_chunk = True
@@ -97,12 +91,16 @@ class Events(commands.Cog):
                         buffer = ""
             if sent is not None:
                 await sent.edit(content=reply.rstrip())
-            elif reply.strip():
-                await message.channel.send(content=reply.rstrip())
             else:
                 await message.channel.send(
                     "Sorry, I couldn't generate a response ⛓️‍💥 (Is the API online?)."
                 )
+
+            asyncio.create_task(
+                self.memory.update_memory(
+                    message.author.id, message.content, reply.rstrip()
+                )
+            )
 
 
 async def setup(bot):

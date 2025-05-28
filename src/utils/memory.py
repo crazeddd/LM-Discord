@@ -1,64 +1,64 @@
 import sqlite3
-
-from utils.lmstudio_client import LMStudioClient
+from datetime import datetime
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
 
 class Memory:
 
     def __init__(self, db_path="memory.db"):
-        self.lm_client = LMStudioClient()
+        self.embedder = SentenceTransformer("all-MiniLM-L6-v2")
         self.connection = sqlite3.connect(db_path)
         self.cursor = self.connection.cursor()
-        
+
         self.cursor.execute(
             """
-    CREATE TABLE IF NOT EXISTS memory (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT,
-        role TEXT,
-        content TEXT
-    )
-    """
+            CREATE TABLE IF NOT EXISTS responses (
+            id INTEGER PRIMARY KEY,
+            user_id TEXT,
+            input TEXT,
+            response TEXT,
+            timestamp TEXT,
+            embedding BLOB
+            )
+
+        """
         )
         self.connection.commit()
 
-    def get_memory(self, user_id) -> str:
+    def search_memory(self, user_id, query, top_k=3) -> str:
+        query_vec = self.embedder.encode(query)
         self.cursor.execute(
-            """
-            SELECT content FROM memory 
-            WHERE user_id = ? 
-            ORDER BY id DESC LIMIT 1
-        """,
+            "SELECT id, input, response, embedding FROM responses WHERE user_id = ?",
             (user_id,),
         )
-        row = self.cursor.fetchone()
 
-        return row[0] if row else "No memory yet."
+        scored = []
+        for row in self.cursor.fetchall():
+            db_embedding = np.frombuffer(row[3], dtype=np.float32)
+            similarity = np.dot(query_vec, db_embedding) / (
+                np.linalg.norm(query_vec) * np.linalg.norm(db_embedding)
+            )
+            if similarity > 0.4:
+                scored.append((similarity, row[1], row[2]))
 
-    async def update_memory(self, user_id, role, messages) -> None:
-        self.lm_studio = LMStudioClient()
-        memory = self.get_memory(user_id)
-        updated_memory = ""
+        top_results = sorted(scored, reverse=True)[:top_k]
+        memory = ""
+        for result in top_results:
+            memory += f"**{result[1]}**\n{result[2]}\n\n"
+        return memory
 
-        system_prompt = f"""
-        Summarize the recent messages from {user_id} and the current memory together in a concise manner to be used as memory.
-
-        [Recent Messages]
-        {messages}
-
-        [Memory]
-        {memory}
-        """
-
-        print("MEMORY PROMPT:", memory)
-
-        async for token in self.lm_studio.stream(
-            messages, system_prompt
-        ):
-            updated_memory += token
+    async def update_memory(self, user_id, input, response) -> None:
+        embedding = self.embedder.encode(input + " " + response)
 
         self.cursor.execute(
-            "INSERT INTO memory (user_id, role, content) VALUES (?, ?, ?)",
-            (user_id, role, updated_memory),
+            "INSERT INTO responses (user_id, input, response, embedding, timestamp) VALUES (?, ?, ?, ?, ?)",
+            (
+                user_id,
+                input,
+                response,
+                embedding.tobytes(),
+                datetime.now().isoformat(),
+            ),
         )
         self.connection.commit()
