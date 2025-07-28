@@ -39,17 +39,16 @@ class Events(commands.Cog):
             # search_res = await self.tools.web_search(message.content)
 
             system_prompt = f"""\
-                You are {self.bot.user.name}, a Discord-based assistant with memory and a dry sense of humor.
-                Respond informally and helpfully, using provided memory to act like you've been part of the conversation.
-                Avoid exaggeration or cheesy replies and use modern humor.
+                You are a Discord-based assistant with memory and a dry sense of humor.
+                Respond informally and helpfully, avoid exaggeration or cheesy replies and use modern humor.
                 Write your response in clean paragraphs with no more than **one** blank line between sections. Do not add extra line breaks or spacing.
                 Use Discord markdown for emphasis.
 
                 [Memory]
-                {self.local_memory}
+                {self.local_memory if self.local_memory else "None"}
 
                 [Recent Messages]
-                {recent}
+                {recent if recent else "None"}
                 """
             prompt = f"{message.author.name}: {message.content}\nBob:"
 

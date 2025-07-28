@@ -1,4 +1,4 @@
-import discord, os, sys, asyncio
+import discord, os, asyncio
 from discord.ext import commands
 from dotenv import load_dotenv
 from datetime import datetime
@@ -7,20 +7,23 @@ from utils.memory import Memory
 from utils.lmstudio_client import LMStudioClient
 from utils.tools import Tools
 
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 load_dotenv()
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.dm_messages = True
+intents.voice_states = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+class CustomBot(commands.Bot):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lm_client = LMStudioClient()
+        self.memory = Memory()
+        self.tools = Tools()
+
+bot = CustomBot(command_prefix="!", intents=intents)
 
 current_model = os.getenv("DEFAULT_MODEL", None)
-
-bot.lm_client = LMStudioClient()
-bot.memory = Memory()
-bot.tools = Tools()
 
 
 @bot.event
@@ -29,7 +32,9 @@ async def on_ready():
     await bot.lm_client.initialize_model(current_model)
     current_model = bot.lm_client.model
     time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    synced = await bot.tree.sync()
+    dev_guild = discord.Object(id=874459438705172530)
+    synced = await bot.tree.sync(guild=dev_guild)
+    #synced = await bot.tree.sync()
 
     await bot.change_presence(
         status=discord.Status.online,
@@ -49,9 +54,13 @@ async def main():
     await bot.load_extension("cogs.events")
     await bot.load_extension("cogs.ping")
     await bot.load_extension("cogs.prompt")
+    await bot.load_extension("cogs.voice")
     # await bot.load_extension("cogs.purge")
 
 
 asyncio.run(main())
 
-bot.run(os.getenv("BOT_TOKEN"))
+bot_token = os.getenv("BOT_TOKEN")
+if not bot_token:
+    raise RuntimeError("BOT_TOKEN environment variable is not set.")
+bot.run(bot_token)

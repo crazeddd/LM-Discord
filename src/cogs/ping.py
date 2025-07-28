@@ -8,7 +8,6 @@ class Test(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="ping", description="Pings the bot")
-    @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def ping(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_message(

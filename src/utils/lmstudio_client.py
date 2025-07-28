@@ -8,19 +8,20 @@ load_dotenv()
 class LMStudioClient:
 
     def __init__(self):
-        self.url = os.getenv("LM_STUDIO_URL", "localhost:1234")
+        self.url = os.getenv("LM_STUDIO_URL", "http://localhost:1234")
         self.model = None
 
     async def initialize_model(self, model) -> None:
 
         if model is None:
             models = await self.get_models()
-            if models and "data" in models and len(models["data"]) > 0:
+            if models and isinstance(models, dict) and "data" in models and len(models["data"]) > 0:
                 self.model = models["data"][0]["id"]
         else:
             self.model = model
+    from typing import Optional
 
-    async def get_models(self) -> AsyncGenerator[dict, None]:
+    async def get_models(self) -> Optional[dict]:
         url = f"{self.url}/v1/models"
         headers = {"Content-Type": "application/json"}
 
@@ -35,6 +36,7 @@ class LMStudioClient:
                         return None
             except aiohttp.ClientError as e:
                 print("Connection error:", e)
+                return None
                 return
 
     async def stream(self, prompt, system_prompt) -> AsyncGenerator[str, None]:

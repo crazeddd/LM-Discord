@@ -1,3 +1,4 @@
 .env
+venv
 memory.db
 __pycache__

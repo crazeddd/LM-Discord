@@ -41,7 +41,7 @@ class Model(commands.Cog):
                 )
 
             async def callback(self, interaction: discord.Interaction) -> None:
-                selection = interaction.data["values"][0]
+                selection = self.values[0]
                 self.current_model = selection
                 await self.lm_client.initialize_model(selection)
 

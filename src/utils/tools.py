@@ -1,4 +1,4 @@
-from duckduckgo_search import DDGS
+# from duckduckgo_search import DDGS
 from utils.lmstudio_client import LMStudioClient
 
 
@@ -28,13 +28,14 @@ class Tools:
         if "no search needed" in query.lower():
             return "No search needed."
         else:
-            try:
-                with DDGS() as ddgs:
-                    results = ddgs.text(query, max_results=max_results)
-                    print("Search results:", results)
-                    if not results:
-                        return "No search results found, inform user of this."
-                    return [f"{r['title']}: {r['body']}" for r in results]
-            except Exception as e:
-                print("Search error:", e)
-                return "Search failed, inform user of failure."
+            print("searched")
+            # try:
+            #     with DDGS() as ddgs:
+            #         results = ddgs.text(query, max_results=max_results)
+            #         print("Search results:", results)
+            #         if not results:
+            #             return "No search results found, inform user of this."
+            #         return [f"{r['title']}: {r['body']}" for r in results]
+            # except Exception as e:
+            #     print("Search error:", e)
+            #     return "Search failed, inform user of failure."
