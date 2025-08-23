@@ -38,10 +38,11 @@ class Events(commands.Cog):
 
             # search_res = await self.tools.web_search(message.content)
 
+            bot_name = self.bot.user.name if self.bot.user and hasattr(self.bot.user, "name") else "the bot"
+
             system_prompt = f"""\
-                You are a Discord-based assistant with memory and a dry sense of humor.
+                You are {bot_name}, a Discord-based assistant with memory and a dry sense of humor.
                 Respond informally and helpfully, avoid exaggeration or cheesy replies and use modern humor.
-                Write your response in clean paragraphs with no more than **one** blank line between sections. Do not add extra line breaks or spacing.
                 Use Discord markdown for emphasis.
 
                 [Memory]
@@ -50,7 +51,7 @@ class Events(commands.Cog):
                 [Recent Messages]
                 {recent if recent else "None"}
                 """
-            prompt = f"{message.author.name}: {message.content}\nBob:"
+            prompt = f"{message.author.name}: {message.content}\n{bot_name}:"
 
             print(system_prompt)
 

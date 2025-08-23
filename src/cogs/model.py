@@ -7,17 +7,25 @@ from discord.ext import commands
 class Model(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.lm_client = bot.lm_client
+        self.lm_client = getattr(bot, "lm_client", None)
 
     @property
     def current_model(self):
-        return self.lm_client.model
+        if self.lm_client is not None:
+            return self.lm_client.model
+        return None
 
     @app_commands.command(
         name="model",
         description=f"Change the current model",
     )
     async def model(self, interaction: discord.Interaction) -> None:
+        if self.lm_client is None:
+            await interaction.response.send_message(
+                "Language model client is not initialized.", ephemeral=True
+            )
+            return
+
         models = await self.lm_client.get_models()
         models_formatted = "```\n" + "\n".join(m["id"] for m in models["data"]) + "```"
         is_dm = interaction.guild is None

@@ -1,13 +1,10 @@
-import os
-import whisper
+from faster_whisper import WhisperModel
 
-model = whisper.load_model("turbo")
+# pick a model: "tiny", "base", "small", "medium", "large-v2"
+# "small" is a good balance for speed/accuracy
+model = WhisperModel("small", device="cpu", compute_type="int8")
 
-def transcribe_audio(path):
-    result = model.transcribe(
-        path,
-        language="en",
-        fp16=False,
-        verbose=False
-    )
-    return result["text"]
+def stream_transcribe(path: str):
+    segments, _ = model.transcribe(path, beam_size=1, vad_filter=True, language="en")
+    for s in segments:
+        yield s.text

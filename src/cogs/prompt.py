@@ -5,7 +5,7 @@ from discord.ext import commands
 
 class Prompt(commands.Cog):
     def __init__(self, bot: commands.Bot):
-        self.lm_client = bot.lm_client
+        self.lm_client = getattr(bot, "lm_client", None)
         self.bot = bot
 
     @app_commands.command(
@@ -15,10 +15,10 @@ class Prompt(commands.Cog):
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def ping(self, interaction: discord.Interaction, prompt: str) -> None:
 
+        bot_name = self.bot.user.name if self.bot.user and hasattr(self.bot.user, "name") else "the bot"
         system_prompt = f"""\
-            You are {self.bot.user.name}, a Discord-based assistant with a dry sense of humor.
+            You are {bot_name}, a Discord-based assistant with a dry sense of humor.
             Respond informally and helpfully, avoid exaggeration or cheesy replies and use modern humor.
-            Write your response in clean paragraphs with no more than **one** blank line between sections. Do not add extra line breaks or spacing.
             Use Discord markdown for emphasis.
             """
 
@@ -29,7 +29,13 @@ class Prompt(commands.Cog):
         reply = ""
         buffer = ""
 
-        await interaction.response.send_message("Loading...")
+        await interaction.response.send_message("Thinking...")
+
+        if not self.lm_client or not hasattr(self.lm_client, "stream"):
+            await interaction.edit_original_response(
+                content="Sorry, language model client is not available or misconfigured."
+            )
+            return
 
         async for token in self.lm_client.stream(prompt, system_prompt):
             buffer += token
@@ -57,7 +63,7 @@ class Prompt(commands.Cog):
             await interaction.edit_original_response(content=reply.rstrip())
         else:
             await interaction.edit_original_response(
-                "Sorry, I couldn't generate a response ⛓️‍💥 (Is the API online?)."
+                content="Sorry, I couldn't generate a response ⛓️‍💥 (Is the API online?)."
             )
 
 

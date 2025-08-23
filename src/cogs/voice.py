@@ -7,11 +7,13 @@ import asyncio
 from collections import defaultdict
 import time
 
-from utils.stt import transcribe_audio
+from utils.stt import stream_transcribe
 from utils.tts import speak_reply
-from utils.filters import should_respond
 
 discord.opus._load_default()
+
+# 👇 trigger words you want users to start with
+TRIGGER_WORDS = ["hey bot", "hey bob"]
 
 class UserSink(BasicSink):
     def __init__(self, responder, channel, vc):
@@ -21,7 +23,9 @@ class UserSink(BasicSink):
         self.vc = vc
         self.buffers = defaultdict(list)
         self.last_spoke = {}
-        self.speaking_threshold = 2 
+        self.speaking_threshold = 2
+
+        #self.isTalking = False
 
         asyncio.create_task(self.monitor_speaking())
 
@@ -41,10 +45,11 @@ class UserSink(BasicSink):
     async def stop_and_process(self, user_id):
         pcm_data = b"".join(self.buffers.pop(user_id, []))
         self.last_spoke.pop(user_id, None)
+
         if not pcm_data:
             return
-
-        if len(pcm_data) < 48000 * 1:
+        
+        if len(pcm_data) < 48000 * 1:  # ignore <1s
             return
 
         user = self.vc.guild.get_member(user_id)
@@ -52,35 +57,41 @@ class UserSink(BasicSink):
             return
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_wav:
-            with wave.open(temp_wav.name, 'wb') as wf:
+            with wave.open(temp_wav.name, "wb") as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
                 wf.setframerate(94000)
                 wf.writeframes(pcm_data)
 
-            transcript = transcribe_audio(temp_wav.name)
-            await self.channel.send(f"**{user.display_name} said:** {transcript}")
+            transcript = ""
+            for chunk in stream_transcribe(temp_wav.name):
+                transcript += chunk
 
-            if (not transcript or not should_respond(transcript)): 
-                return
+        if not transcript.strip():
+            return
 
-        if transcript:
-            print(transcript)
-            reply_text = ""
-            system_prompt = """
-                You are a Discord-based voice assistant with a dry sense of humor.
-                Respond informally and helpfully, avoid exaggeration or cheesy replies and use modern humor.
-            """
-            async for chunk in self.responder.lm_client.stream(transcript, system_prompt):
-                reply_text += chunk
+        lowered = transcript.lower().strip()
+        if not any(lowered.startswith(word) for word in TRIGGER_WORDS):
+            print(f"Ignoring (no trigger word): {transcript}")
+            return
 
-            await self.channel.send(f"**AI replied:** {reply_text}")
-            tts_path = f"/tmp/reply_{user.id}.wav"
-            reply_text = reply_text.removeprefix("text:").strip()
-            print(reply_text)
-            speak_reply(reply_text, tts_path)
-            if self.vc and self.vc.is_connected():
-                self.vc.play(discord.FFmpegPCMAudio(tts_path))
+        await self.channel.send(f"**{user.display_name} said:** {transcript}")
+
+        reply_text = ""
+        system_prompt = """
+            You are a Discord-based voice assistant with a sense of humor.
+            Respond informally and helpfully without any markup emojis or symbols as if directly talking to someone.
+        """
+        async for chunk in self.responder.lm_client.stream(transcript, system_prompt):
+            reply_text += chunk
+
+        await self.channel.send(f"**AI replied:** {reply_text}")
+        tts_path = f"/tmp/reply_{user.id}.wav"
+        reply_text = reply_text.removeprefix("text:").strip()
+        speak_reply(reply_text, tts_path)
+        if not self.vc.is_playing() and self.vc.is_connected():
+            self.vc.play(discord.FFmpegPCMAudio(tts_path))
+
 
 
 class VoiceResponder(commands.Cog):
@@ -115,6 +126,7 @@ class VoiceResponder(commands.Cog):
             del self.voice_clients[ctx.guild.id]
             self.user_sinks.pop(ctx.guild.id, None)
             await ctx.send("Left the VC and stopped listening.")
+
 
 async def setup(bot):
     await bot.add_cog(VoiceResponder(bot))
