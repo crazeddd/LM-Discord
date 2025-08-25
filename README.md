@@ -8,13 +8,14 @@ A simple Discord bot for the LM Studio REST API.
 - Long term user based memory using `sentence-transformers`
 - Web search functionality **(WIP)**
 - Built in commands to interact with the LLMs
+- Basic voicechat abilites 
 - Very customizable
 
 ## Setup
 1. Create a new [Discord bot](https://discord.com/developers/applications)
 2. Copy your bot token and keep it somewhere safe in the meantime
 3. Clone or download the repo
-4. Go to the src folder and create a .env file like seen below:
+4. Go to the src folder and create a .env file like seen below (you can also directly modify the docker file):
 ```py
 BOT_TOKEN= #Your Bot Token Here
 LM_STUDIO_URL= #http://host.docker.internal:1234 (default if running in docker)
@@ -29,8 +30,8 @@ DEFAULT_MODEL= #gemma-3-12b-it (defaults to first model found if none)
 
 ### If not using Docker:
 1. Navigate to the project root folder
-2. Run this script to download dependencies: `pip install dotenv discord.py asyncio requests sentence-transformers`
-3. Then navigate to the src file and start the bot `cd src; python3 __main__.py`
+2. Run this script to download dependencies: `pip install -r requirements.txt`
+3. Then navigate to the src file and start the bot `cd src; python __main__.py`
 
 ## Using the bot:
 By default replies to @'s but can be configured to respond to other things.
@@ -40,11 +41,21 @@ By default replies to @'s but can be configured to respond to other things.
 
 ![Model Command](/assets/model.png)
 
-`/prompt`: Manually prompts the bot without context (mostly for use in private channels: direct messages, group chats, etc)
+`/prompt`: Manually prompts the bot without context (mostly for use in direct messages, group chats, etc)
 
 ![Prompt Command](/assets/prompt.png)
 
 ...and more to come
+
+## Todo
+
+- [ ] Finish voice chat implimentation
+- [ ] Create permissions
+- [ ] More out of the box customizability (option to disable long term memory)
+- [ ] Add a lighter weight long term memory option
+- [ ] Create smarter short term memory
+- [ ] Finish web search tool (maybe)
+- [ ] Add music player tool (maybe)
 
 ## Additional Notes
 
