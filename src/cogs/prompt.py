@@ -13,16 +13,18 @@ class Prompt(commands.Cog):
     )
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-    async def ping(self, interaction: discord.Interaction, prompt: str) -> None:
+    async def prompt(self, interaction: discord.Interaction, prompt: str) -> None:
 
-        bot_name = self.bot.user.name if self.bot.user and hasattr(self.bot.user, "name") else "the bot"
+        bot_name = (
+            self.bot.user.name
+            if self.bot.user and hasattr(self.bot.user, "name")
+            else "the bot"
+        )
         system_prompt = f"""\
-            You are {bot_name}, a Discord-based assistant with a dry sense of humor.
-            Respond informally and helpfully, avoid exaggeration or cheesy replies and use modern humor.
-            Use Discord markdown for emphasis.
+            You are a Discord-based assistant with a dry sense of humor.
+                Do NOT include any tags like <|start|>, <|end|>, <|assistant|>, <|channel|>, <|message|>, or tool-call wrappers.
+                Use Discord markdown for emphasis, respond helpfully.
             """
-
-        print(system_prompt, prompt)
 
         inside_think = False
         buffer_rate = 175
@@ -33,11 +35,14 @@ class Prompt(commands.Cog):
 
         if not self.lm_client or not hasattr(self.lm_client, "stream"):
             await interaction.edit_original_response(
-                content="Sorry, language model client is not available or misconfigured."
+                content="Sorry, I couldn't generate a response ⛓️‍💥 (Is the API online?)."
             )
             return
 
-        async for token in self.lm_client.stream(prompt, system_prompt):
+        async for token in self.lm_client.stream(
+            [{"role": "user", "name": interaction.user.name, "content": prompt}],
+            system_prompt,
+        ):
             buffer += token
 
             if "<think>" in buffer:

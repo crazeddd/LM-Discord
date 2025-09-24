@@ -15,10 +15,16 @@ class LMStudioClient:
 
         if model is None:
             models = await self.get_models()
-            if models and isinstance(models, dict) and "data" in models and len(models["data"]) > 0:
+            if (
+                models
+                and isinstance(models, dict)
+                and "data" in models
+                and len(models["data"]) > 0
+            ):
                 self.model = models["data"][0]["id"]
         else:
             self.model = model
+
     from typing import Optional
 
     async def get_models(self) -> Optional[dict]:
@@ -37,17 +43,14 @@ class LMStudioClient:
             except aiohttp.ClientError as e:
                 print("Connection error:", e)
                 return None
-                return
 
-    async def stream(self, prompt, system_prompt) -> AsyncGenerator[str, None]:
+    async def stream(self, history, system_prompt) -> AsyncGenerator[str, None]:
         url = f"{self.url}/v1/chat/completions"
         headers = {"Content-Type": "application/json"}
+
         payload = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
+            "messages": [{"role": "system", "content": system_prompt}] + history,
             "stream": True,
         }
 

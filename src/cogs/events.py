@@ -1,4 +1,5 @@
 import asyncio
+import re
 from discord.ext import commands
 
 
@@ -10,18 +11,53 @@ class Events(commands.Cog):
         self.tools = bot.tools
         self.local_memory = None
 
-    async def get_channel_history(self, history) -> str:
+    async def get_channel_history(self, history) -> list:
         history = [msg async for msg in history]
         messages = []
 
         for msg in history:
+            author_name = (
+                msg.author.display_name
+                if hasattr(msg.author, "display_name")
+                else msg.author.name
+            )
+
+            content = msg.clean_content
+
+            if self.bot and self.bot.user:
+                bot_user = self.bot.user
+
+                content = content.replace(f"<@{bot_user.id}>", "")
+                content = content.replace(f"<@!{bot_user.id}>", "")
+
+                bot_display = (
+                    bot_user.display_name
+                    if hasattr(bot_user, "display_name")
+                    else bot_user.name
+                )
+
+                content = re.sub(
+                    rf"@?{re.escape(bot_display)}",
+                    "",
+                    content,
+                    flags=re.IGNORECASE,
+                )
+
+                content = re.sub(r'^[\s@:,\-]+', '', content)
+                content = re.sub(r'\s{2,}', ' ', content)
+
+            content = content.strip()
+
             messages.insert(
                 0,
-                f"[{msg.created_at.strftime('%Y-%m-%d %H:%M:%S')}] {msg.author.name}: {msg.content}",
+                {
+                    "role": "user" if msg.author != self.bot.user else "assistant",
+                    "name": author_name,
+                    "content": content,
+                },
             )
-        recent = "\n".join(messages)
 
-        return recent
+        return messages
 
     @commands.Cog.listener()
     async def on_message(self, message) -> None:
@@ -30,7 +66,7 @@ class Events(commands.Cog):
             return
 
         if self.bot.user in message.mentions:
-            recent = await self.get_channel_history(message.channel.history(limit=10))
+            messages = await self.get_channel_history(message.channel.history(limit=10))
 
             self.local_memory = self.memory.search_memory(
                 message.author.id, message.content
@@ -38,22 +74,14 @@ class Events(commands.Cog):
 
             # search_res = await self.tools.web_search(message.content)
 
-            bot_name = self.bot.user.name if self.bot.user and hasattr(self.bot.user, "name") else "the bot"
-
             system_prompt = f"""\
-                You are {bot_name}, a Discord-based assistant with memory and a dry sense of humor.
-                Respond informally and helpfully, avoid exaggeration or cheesy replies and use modern humor.
-                Use Discord markdown for emphasis.
+                You are a Discord-based assistant with memory and a dry sense of humor.
+                Do NOT include any tags like <|start|>, <|end|>, <|assistant|>, <|channel|>, <|message|>, or tool-call wrappers.
+                Use Discord markdown for emphasis, respond helpfully.
 
                 [Memory]
                 {self.local_memory if self.local_memory else "None"}
-
-                [Recent Messages]
-                {recent if recent else "None"}
                 """
-            prompt = f"{message.author.name}: {message.content}\n{bot_name}:"
-
-            print(system_prompt)
 
             async with message.channel.typing():
                 is_first_chunk = True
@@ -63,7 +91,7 @@ class Events(commands.Cog):
                 buffer = ""
                 sent = None
 
-                async for token in self.lm_client.stream(prompt, system_prompt):
+                async for token in self.lm_client.stream(messages, system_prompt):
                     buffer += token
 
                     if "<think>" in buffer:

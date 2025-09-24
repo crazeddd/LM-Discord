@@ -2,8 +2,8 @@ import wave
 from piper.voice import PiperVoice
 
 def speak_reply(text: str, output_path: str = "out.wav"):
-    model_path = "../audio/tts_models/en_US-amy-medium.onnx"
-    config_path = "../audio/tts_models/en_US-amy-medium.onnx.json"
+    model_path = "audio/tts_models/en_US-amy-medium.onnx"
+    config_path = "audio/tts_models/en_US-amy-medium.onnx.json"
 
     voice = PiperVoice.load(model_path, config_path)
 

@@ -5,7 +5,7 @@ import wave
 import tempfile
 import asyncio
 from collections import defaultdict
-import time
+import time, os
 
 from utils.stt import stream_transcribe
 from utils.tts import speak_reply
@@ -13,7 +13,7 @@ from utils.tts import speak_reply
 discord.opus._load_default()
 
 # 👇 trigger words you want users to start with
-TRIGGER_WORDS = ["hey bot", "hey bob"]
+TRIGGER_WORDS = os.getenv("VOICE_TRIGGER_WORDS", "hey bot,ok bot,hello bot").lower().split(",")
 
 class UserSink(BasicSink):
     def __init__(self, responder, channel, vc):
@@ -80,9 +80,10 @@ class UserSink(BasicSink):
         reply_text = ""
         system_prompt = """
             You are a Discord-based voice assistant with a sense of humor.
-            Respond informally and helpfully without any markup emojis or symbols as if directly talking to someone.
+            Respond ONLY with text to be spoken aloud. Do not include any symbols, markdown or emojis.
+            Keep responses brief and to the point.
         """
-        async for chunk in self.responder.lm_client.stream(transcript, system_prompt):
+        async for chunk in self.responder.lm_client.stream([{"role":"user", "name": user.display_name, "content": transcript}], system_prompt):
             reply_text += chunk
 
         await self.channel.send(f"**AI replied:** {reply_text}")
